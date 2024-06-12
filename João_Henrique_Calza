@@ -1,10 +1,149 @@
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <map>
+#include <queue>
+#include <iomanip>
 
 using namespace std;
 
-int main(){
+struct Node {
+    wchar_t simbolo;
+    int freq;
+    Node* left;
+    Node* right;
+    Node(wchar_t s, int f) : simbolo(s), freq(f), left(nullptr), right(nullptr) {}
+};
 
-cout << "Teste" << endl;
+struct CompararN {
+    bool operator()(Node* a, Node* b) const {
+        return a->freq > b->freq;
+    }
+};
 
+map<wchar_t, int> lerArquivo(const string& nomearq) {
+    wifstream arq(nomearq);
+    map<wchar_t, int> freqM;
+    if (arq.is_open()) {
+        wchar_t simbolo;
+        while (arq.get(simbolo)) {
+            freqM[simbolo]++;
+        }
+    } else {
+        cout << "Erro ao abrir arquivo!" << endl;
+        exit(1);
+    }
+    return freqM;
+}
 
-return 0;}
+Node* construirHuffman(const map<wchar_t, int>& freqM) {
+    priority_queue<Node*, vector<Node*>, CompararN> pq;
+    for (const auto& pair : freqM)
+        pq.push(new Node(pair.first, pair.second));
+
+    while (pq.size() > 1) {
+        Node* left = pq.top(); pq.pop();
+        Node* right = pq.top(); pq.pop();
+        Node* parent = new Node(L'\0', left->freq + right->freq);
+        parent->left = left;
+        parent->right = right;
+        pq.push(parent);
+    }
+    return pq.top();
+}
+
+void gerarTabela(Node* node, string code, map<wchar_t, string>& codTab) {
+    if (node == nullptr) {
+        return;
+    }
+
+    if (node->simbolo != L'\0') {
+        codTab[node->simbolo] = code;
+    }
+
+    gerarTabela(node->left, code + "0", codTab);
+    gerarTabela(node->right, code + "1", codTab);
+}
+
+struct BSTNode {
+    Node* huffNode;
+    BSTNode* left;
+    BSTNode* right;
+    BSTNode(Node* hNode) : huffNode(hNode), left(nullptr), right(nullptr) {}
+};
+
+void BST_insert(BSTNode*& root, Node* huffNode) {
+    if (!root)
+        root = new BSTNode(huffNode);
+    else if (huffNode->freq > root->huffNode->freq)
+        BST_insert(root->left, huffNode);
+    else
+        BST_insert(root->right, huffNode);
+}
+
+void exibirArvoreBST(BSTNode* root, int level = 0) {
+    if (!root) return;
+    exibirArvoreBST(root->left, level + 1);
+    cout << string(level * 2, ' ');
+    if (!root->huffNode->left && !root->huffNode->right && root->huffNode->simbolo != L'\0') {
+        cout << "+--- U+" << setw(4) << setfill('0') << hex << int(root->huffNode->simbolo) << " (" << dec << root->huffNode->freq << ")" << endl;
+    }
+    exibirArvoreBST(root->right, level + 1);
+}
+
+void exibirArvoreHuffman(Node* root, const map<wchar_t, string>& codTab) {
+    BSTNode* bstRoot = nullptr;
+    queue<Node*> q;
+    q.push(root);
+    while (!q.empty()) {
+        Node* current = q.front(); q.pop();
+        BST_insert(bstRoot, current);
+        if (current->left) q.push(current->left);
+        if (current->right) q.push(current->right);
+    }
+
+    cout << "Arvore de Huffman:" << endl;
+    exibirArvoreBST(bstRoot);
+
+    cout << "Tabela de codigo:" << endl;
+    for (const auto& pair : codTab)
+        cout << "U+" << setw(4) << setfill('0') << hex << int(pair.first) << "\t" << pair.first << " -> " << pair.second << endl;
+}
+
+void calcularCompactacao(const string& nomearq, const map<wchar_t, string>& codTab) {
+    wifstream arq(nomearq);
+    double tamanhoOriginal = 0;
+    if (arq.is_open()) {
+        wchar_t simbolo;
+        while (arq.get(simbolo)) {
+            tamanhoOriginal++;
+        }
+    }
+
+    double compactado = 0;
+    for (const auto& pair : codTab) {
+        compactado += pair.second.size() * pair.second.size();
+    }
+
+    double taxaCompactacao = (1 - compactado / tamanhoOriginal) * 100;
+
+    cout << "Tamanho original: " << tamanhoOriginal << " bytes" << endl;
+    cout << "Tamanho resultante da compactacao: " << compactado << " bytes" << endl;
+    cout << "Diferenca entre ambos (%): " << taxaCompactacao << "%" << endl;
+}
+
+int main() {
+    string nomearq;
+    cout << "Digite o nome do arquivo: ";
+    cin >> nomearq;
+
+    map<wchar_t, int> freqMap = lerArquivo(nomearq);
+    Node* root = construirHuffman(freqMap);
+    map<wchar_t, string> codTab;
+    gerarTabela(root, "", codTab);
+
+    exibirArvoreHuffman(root, codTab);
+    calcularCompactacao(nomearq, codTab);
+
+    return 0;
+}
